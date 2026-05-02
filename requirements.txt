@@ -1,9 +1,9 @@
-# S!M0N Vulnerability Scanner - Requirements
+# S!M0N v3 - Web Vulnerability Scanner
 # Install: pip install -r requirements.txt
 
-requests==2.32.3        # HTTP requests & session handling
-beautifulsoup4==4.12.3  # HTML parsing for crawling
-reportlab==4.2.0        # PDF report generation
-colorama==0.4.6         # Colored terminal output
-tqdm==4.66.4            # Progress bars
-urllib3==2.2.1          # Connection pooling (used by requests)
+requests==2.32.3        # HTTP requests, session handling, redirect following
+beautifulsoup4==4.12.3  # HTML parsing for crawling + form extraction
+reportlab==4.2.0        # PDF report generation with styled output
+colorama==0.4.6         # Colored terminal output (Windows compatible)
+tqdm==4.66.4            # Progress bars for scan phases
+urllib3==2.2.1          # Connection pooling (dependency of requests)
