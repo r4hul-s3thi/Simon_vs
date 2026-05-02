@@ -278,12 +278,15 @@ class EnhancedVulnerabilityScanner:
             pass
 
     def check_http_methods(self):
-        for method in ['PUT', 'DELETE', 'TRACE', 'CONNECT']:
+        # FIX: 400/403 = server rejected the method = NOT a vulnerability
+        # Only flag if server genuinely accepts it (2xx response)
+        safe_reject_codes = [400, 401, 403, 404, 405, 501, 502, 503]
+        for method in ['PUT', 'DELETE', 'TRACE']:
             try:
                 resp = self.session.request(method, self.target_url, headers=self.headers, timeout=10)
-                if resp.status_code not in [405, 501]:
+                if resp.status_code not in safe_reject_codes:
                     self.vulnerabilities.append({'type': 'Dangerous HTTP Methods', 'url': self.target_url,
-                                                 'description': f'{method} returned {resp.status_code}'})
+                                                 'description': f'{method} accepted by server (status {resp.status_code})'})
             except Exception:
                 pass
 
@@ -328,11 +331,14 @@ class EnhancedVulnerabilityScanner:
         test_urls = [f"{self.target_url}?{k}={p}" for k in keys for p in targets[:2]]
         for test_url in tqdm(test_urls, desc="[Open Redirect]", ncols=100, colour="yellow"):
             try:
-                resp = self.session.get(test_url, allow_redirects=False, headers=self.headers, timeout=10)
-                location = resp.headers.get('Location', '')
-                if resp.status_code in (301, 302, 303, 307, 308) and 'evil.com' in location:
+                # FIX: follow full redirect chain, check FINAL url is actually evil.com
+                resp = self.session.get(test_url, allow_redirects=True, headers=self.headers, timeout=10)
+                final_url = resp.url
+                # Must actually land on evil.com domain, not just contain the string
+                parsed_final = urlparse(final_url)
+                if 'evil.com' in parsed_final.netloc:
                     self.vulnerabilities.append({'type': 'Open Redirect', 'url': test_url,
-                                                 'description': f'Redirects to: {location}'})
+                                                 'description': f'Confirmed redirect to: {final_url}'})
             except Exception:
                 continue
 
@@ -513,21 +519,33 @@ class EnhancedVulnerabilityScanner:
         self.vulnerabilities.extend(results)
 
     def check_command_injection(self):
-        cmd_payloads = ['; ls', '| whoami', '`id`', '$(whoami)', '; id;', '& whoami &']
+        # FIX: compare response WITH payload vs WITHOUT to detect actual execution
+        # Checking for uid=/root: in reflected text is a false positive (search pages reflect input)
+        cmd_pairs = [
+            ('; echo SIMON_INJECT_TEST', 'SIMON_INJECT_TEST'),
+            ('| echo SIMON_INJECT_TEST', 'SIMON_INJECT_TEST'),
+            ('$(echo SIMON_INJECT_TEST)', 'SIMON_INJECT_TEST'),
+        ]
         urls = list(self.param_urls)[:10]
         for url in tqdm(urls, desc="[Cmd Injection]", ncols=100, colour="red"):
             parsed = urlparse(url)
             params = parse_qs(parsed.query)
             for param in params:
-                for payload in cmd_payloads:
+                # Get baseline response first
+                try:
+                    baseline = self.session.get(url, headers=self.headers, timeout=10).text
+                except Exception:
+                    continue
+                for payload, marker in cmd_pairs:
                     np = params.copy()
                     np[param] = [payload]
                     test_url = parsed._replace(query=urlencode(np, doseq=True)).geturl()
                     try:
                         resp = self.session.get(test_url, headers=self.headers, timeout=10)
-                        if any(x in resp.text.lower() for x in ['uid=', 'gid=', 'root:', 'www-data']):
+                        # Marker must appear in response BUT NOT in baseline
+                        if marker in resp.text and marker not in baseline:
                             self.vulnerabilities.append({'type': 'Command Injection', 'url': test_url,
-                                                         'description': f'Cmd exec via param: {param}'})
+                                                         'description': f'Confirmed cmd exec via param: {param}'})
                             break
                     except Exception:
                         continue
