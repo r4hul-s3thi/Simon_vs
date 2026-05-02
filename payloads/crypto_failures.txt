@@ -1,0 +1,147 @@
+# ── Sensitive Data Exposure - Endpoints ──
+/api/keys
+/api/secrets
+/api/tokens
+/api/credentials
+/api/config
+/api/env
+/api/debug
+/api/internal
+/api/private
+/v1/keys
+/v1/secrets
+/v1/tokens
+/v2/keys
+/v2/secrets
+
+# ── Exposed Config / Secret Files ──
+/.env
+/.env.local
+/.env.development
+/.env.staging
+/.env.production
+/.env.test
+/.env.backup
+/.env.bak
+/.env.old
+/.env.save
+/.env.swp
+/.env~
+/env.js
+/env.json
+/config.js
+/config.json
+/config.yml
+/config.yaml
+/config.xml
+/config.ini
+/config.cfg
+/config.conf
+/config.php
+/config.rb
+/config.py
+/settings.json
+/settings.yml
+/settings.py
+/application.yml
+/application.properties
+/appsettings.json
+/appsettings.Development.json
+/secrets.json
+/secrets.yml
+/credentials.json
+/credentials.yml
+/database.yml
+/database.json
+/db.json
+/db.yml
+
+# ── Cloud Metadata (Cryptographic Key Exposure) ──
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+http://169.254.169.254/latest/user-data/
+http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+http://100.100.100.200/latest/meta-data/ram/security-credentials/
+
+# ── Backup / Source Code Exposure ──
+/index.php.bak
+/index.php.old
+/index.php~
+/index.php.swp
+/index.php.save
+/index.bak
+/index.old
+/index~
+/login.php.bak
+/login.php.old
+/config.php.bak
+/config.php.old
+/wp-config.php.bak
+/wp-config.php.old
+/wp-config.php~
+/.DS_Store
+/Thumbs.db
+/desktop.ini
+/web.config.bak
+/web.config.old
+
+# ── SSL/TLS Weakness Probes ──
+# Test these endpoints for HTTP (non-HTTPS) access
+/login
+/signin
+/register
+/signup
+/checkout
+/payment
+/account
+/profile
+/password
+/reset-password
+/change-password
+/api/auth
+/api/login
+/api/register
+
+# ── Weak Hashing Detection Patterns ──
+# Look for these in responses - indicates weak crypto
+md5(
+sha1(
+base64_decode(
+rot13(
+crc32(
+# MD5 pattern: 32 hex chars
+[0-9a-f]{32}
+# SHA1 pattern: 40 hex chars
+[0-9a-f]{40}
+# Base64 encoded secrets
+[A-Za-z0-9+/]{20,}={0,2}
+
+# ── JWT None Algorithm Attack ──
+eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIn0.
+eyJhbGciOiJOT05FIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIn0.
+eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIn0.
+
+# ── Exposed Private Keys / Certs ──
+/server.key
+/server.pem
+/server.crt
+/private.key
+/private.pem
+/id_rsa
+/.ssh/id_rsa
+/.ssh/id_dsa
+/.ssh/id_ecdsa
+/.ssh/id_ed25519
+/ssl.key
+/ssl.pem
+/tls.key
+/tls.crt
+/ca.key
+/ca.pem
+/cert.key
+/cert.pem
+/keystore.jks
+/keystore.p12
+/truststore.jks
+/.pgp
+/pgp.key
+/gpg.key

